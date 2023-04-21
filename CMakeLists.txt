@@ -70,5 +70,4 @@ endif()
 
 enable_testing()
 
-add_subdirectory(CUDALib)
 add_subdirectory(CUDAExec)

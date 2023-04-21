@@ -3,31 +3,42 @@
 #include <stdio.h>
 #include "gtest/gtest.h"
 
-#include "CUDALib.h"
+#include "helper.h"
 
-__global__ void exec_kernel()
-{
-    printf("\n I am thread %d from exec_kernel\n", threadIdx.x);
-}
+#include <cuda_profiler_api.h>
 
-TEST(Test, exe)
+__global__ void test6(float* ptr, float* out)
 {
-    exec_kernel<<<1, 1>>>();
-    auto err = cudaDeviceSynchronize();
-    EXPECT_EQ(err, cudaSuccess);    
-}
+    
+    __shared__ float4 shareM[32];
+    float4*           ptr_temp = (float4*)ptr;
+    for (int i = 0; i < 10; i++) {
+        if (threadIdx.x < 32) {
+            shareM[threadIdx.x] = ptr_temp[threadIdx.x];
+        }
+        __syncwarp();
+    }
 
-TEST(Test, lib)
-{
-    CUDALib lib;
-    lib.run();
-    auto err = cudaDeviceSynchronize();
-    EXPECT_EQ(err, cudaSuccess);
+    out[threadIdx.x] = ((float*)(shareM))[threadIdx.x];
 }
 
 int main(int argc, char** argv)
 {
-    ::testing::InitGoogleTest(&argc, argv);
+    size_t bytes = sizeof(float4) * 32;
+    float *ptr, *out;
+    CUDA_ERROR(cudaMalloc((void**)&ptr, bytes));
+    CUDA_ERROR(cudaMalloc((void**)&out, bytes));
 
-    return RUN_ALL_TESTS();
+    CUDA_ERROR(cudaMemset(ptr, 0, bytes));
+    CUDA_ERROR(cudaMemset(ptr, 1, bytes));
+
+    CUDA_ERROR(cudaProfilerStart());
+
+    test6<<<1, 32>>>(ptr, out);
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    CUDA_ERROR(cudaProfilerStop());
+
+    return 0;
 }
